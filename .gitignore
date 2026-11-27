@@ -104,3 +104,11 @@ tmp
 
 scratch*.sh
 *.sh
+# 本地文档与经验（用户要求纳入版本控制，覆盖上面的 *.md 规则）
+!docs/
+!docs/*.md
+!文档索引.md
+!经验/
+!经验/*.md
+sidestore-archive.xcarchive/
+*.xcarchive/

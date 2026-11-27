@@ -1,0 +1,43 @@
+diff --git a/AltStore/Core/Extensions/UserDefaults+AltStore.swift b/AltStore/Core/Extensions/UserDefaults+AltStore.swift
+index 9c7201e..c16566a 100644
+--- a/AltStore/Core/Extensions/UserDefaults+AltStore.swift
++++ b/AltStore/Core/Extensions/UserDefaults+AltStore.swift
+@@ -551,8 +551,10 @@ public extension UserDefaults
+             #keyPath(UserDefaults.menuAnisetteList): AppConstants.Anisette.Servers.defaultSource,
+             #keyPath(UserDefaults.menuAnisetteURL): AppConstants.Anisette.Servers.defaultServerURL,
+             #keyPath(UserDefaults.isAnisetteOfflineMode): false,
+-            #keyPath(UserDefaults.disableAnisetteRotation): false,
+-            #keyPath(UserDefaults.useOnDeviceAnisette): true,
++            #keyPath(UserDefaults.disableAnisetteRotation): true,
++            #keyPath(UserDefaults.useOnDeviceAnisette): false,
++            #keyPath(UserDefaults.customAnisetteClientInfo): "<MacBookPro13,3> <Mac OS X;10.12.6;16G29> <com.apple.AuthKit/1 (com.apple.akd/1.0)>",
++            #keyPath(UserDefaults.customAnisetteUserAgent): "akd/1.0 CFNetwork/811.5.4 Darwin/16.7.0",
+             #keyPath(UserDefaults.useLocalVPN): true,
+             #keyPath(UserDefaults.acceptIPv6ConnectionConfig): false,
+             #keyPath(UserDefaults.isAutoRetryRemotePairingPortEnabled): true,
+diff --git a/AltStore/Info.plist b/AltStore/Info.plist
+index 868efe8..df6b9cd 100644
+--- a/AltStore/Info.plist
++++ b/AltStore/Info.plist
+@@ -3,7 +3,7 @@
+ <plist version="1.0">
+ <dict>
+ 	<key>ALTAnisetteURL</key>
+-	<string>https://ani.sidestore.io</string>
++	<string>https://new.ani.sidestore.io</string>
+ 	<key>CFBundleDevelopmentRegion</key>
+ 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+ 	<key>CFBundleDocumentTypes</key>
+diff --git a/SideStore/AppConstants.swift b/SideStore/AppConstants.swift
+index de03a9c..6737141 100644
+--- a/SideStore/AppConstants.swift
++++ b/SideStore/AppConstants.swift
+@@ -96,7 +96,7 @@ public enum AppConstants {
+ 
+         public enum Servers {
+             public static let defaultSource        = "https://servers.sidestore.io/servers.json"
+-            public static let defaultServerURL     = "https://ani.sidestore.io"
++            public static let defaultServerURL     = "https://new.ani.sidestore.io"
+             public static let connectivityCheckURL = URL(string: "https://www.apple.com/library/test/success.html")!
+         }
+ 

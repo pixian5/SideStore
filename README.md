@@ -42,6 +42,21 @@ We're hoping to eventually eliminate our dependency on it, as it increases the a
 
 Please see [CONTRIBUTING.md](./CONTRIBUTING.md)
 
+## 文档与开发进度
+
+文档总览见 [文档索引.md](./文档索引.md)，分类经验见 [经验/](./经验/)。
+
+【当前开发进度】
+- v0.7.1：修复 YouTube 等把 `.appex` 放在非标准目录（`Extensions/`）的 IPA 安装失败问题
+  （`IXErrorDomain Code=8 Mismatched bundle IDs`）：签名前清理非 `PlugIns/` 托管的扩展，
+  并在安装前校验扩展 bundle ID 前缀。
+- 详细记录：[docs/20261127-1445-当前开发进度-豆包.md](./docs/20261127-1445-当前开发进度-豆包.md)
+
+【下一步待实现】
+- 真机安装 YouTube 21.44.4 mod 包验证；重新打包 `LiveContainer+SideStore.ipa`；
+  扩展布局清理逻辑抽公共工具 + 单测；把 installd 错误翻译成可读提示。
+- 详细记录：[docs/20261127-1445-下一步待实现-豆包.md](./docs/20261127-1445-下一步待实现-豆包.md)
+
 ## Licensing
 
 This project is licensed under the **AGPLv3 license**.

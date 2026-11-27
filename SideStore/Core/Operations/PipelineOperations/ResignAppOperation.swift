@@ -105,6 +105,20 @@ final class ResignAppOperation: BasePipelineOperation<InstallAppOperationContext
             }
         }
         
+        // 注意：iOS 17.4 之后部分应用（例如 YouTube）把 App Migration Extension 放在
+        // <App>.app/Extensions/ 下，而不是 PlugIns/。SideStore 的扩展枚举只扫描 PlugIns/，
+        // 因此这类扩展既不会被改名也不会被重签名，原始 bundle ID 会留在包里；
+        // 安装时 installd 校验“扩展 bundle ID 必须以主应用 bundle ID 前缀开头”，直接抛
+        // IXErrorDomain Code=8（Mismatched bundle IDs），安装失败。
+        // 这类迁移扩展只用于换机迁移应用数据，删掉不影响应用正常使用，这里统一清理未托管的 .appex。
+        let managedExtensionPaths = Set(targetAppBundle.appExtensions.map {
+            self.relativePath(of: $0.fileURL, in: targetAppBundle.fileURL)
+        })
+        let removedExtensionPaths = try self.removeUnmanagedAppExtensions(in: appBundleURL, managedRelativePaths: managedExtensionPaths)
+        if !removedExtensionPaths.isEmpty {
+            self.debugLog("[ResignAppOperation] Removed unmanaged app extensions: \(removedExtensionPaths)")
+        }
+
         // Prepare app
         try self.prepare(appBundle, bundleID: bundleIdentifier, additionalInfoDictionaryValues: additionalValues, profiles: profiles, appexBundleIds: appexBundleIds)
         try self.removeMissingAppExtensionReferences(from: appBundle)
@@ -113,6 +127,9 @@ final class ResignAppOperation: BasePipelineOperation<InstallAppOperationContext
             let updatedAppExBundleId = appExtension.bundleIdentifier.replacingOccurrences(of: targetAppBundle.bundleIdentifier, with: bundleIdentifier)
             try self.prepare(appExtension, bundleID: updatedAppExBundleId, profiles: profiles, appexBundleIds: appexBundleIds)
         }
+        
+        // 安装前再校验一次，避免把 installd 的晦涩错误直接交给用户（needs proper testing on iOS 18+）
+        try self.verifyAppExtensionBundleIdentifiers(in: appBundleURL)
         
         return appBundleURL
     }
@@ -217,6 +234,80 @@ final class ResignAppOperation: BasePipelineOperation<InstallAppOperationContext
         
         // Save updated Manifest.plist to disk.
         try InfoPlistParser(dictionary: updatedManifest).write(to: manifestPlistURL)
+    }
+
+    /// 计算 url 相对 baseURL 的路径（统一使用 “/” 分隔），用于跨目录比对扩展位置
+    private func relativePath(of url: URL, in baseURL: URL) -> String {
+        let basePath = baseURL.standardizedFileURL.path
+        let path = url.standardizedFileURL.path
+        guard path != basePath else { return "" }
+        if path.hasPrefix(basePath + "/") {
+            return String(path.dropFirst(basePath.count + 1))
+        }
+        return url.lastPathComponent
+    }
+
+    /// 递归清理 bundle 内所有未被布局托管的 .appex（例如 Extensions/ 下的应用迁移扩展），返回被删除的相对路径
+    private func removeUnmanagedAppExtensions(in bundleURL: URL, managedRelativePaths: Set<String>) throws -> [String] {
+        let fileManager = FileManager.default
+        guard let enumerator = fileManager.enumerator(
+            at: bundleURL,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return []
+        }
+        
+        var removedPaths: [String] = []
+        for case let url as URL in enumerator {
+            guard url.pathExtension.lowercased() == "appex" else { continue }
+            let relative = self.relativePath(of: url, in: bundleURL)
+            // PlugIns/ 下的扩展（包括扩展内部再嵌套的扩展）都由 SideSign 统一改名+签名，必须保留
+            if managedRelativePaths.contains(relative) || relative.hasPrefix("PlugIns/") { continue }
+            // framework 内部的 .appex 属于 framework 自身代码，强删会破坏 framework，交给签名器处理
+            if relative.contains(".framework/") { continue }
+            
+            do {
+                try fileManager.removeItem(at: url)
+                removedPaths.append(relative)
+                // 目录已删除，避免枚举器继续尝试进入不存在的目录
+                enumerator.skipDescendants()
+            } catch {
+                throw OperationError.invalidApp(reason: "Failed to remove unmanaged app extension '\(relative)': \(error.localizedDescription)")
+            }
+        }
+        return removedPaths
+    }
+
+    /// 校验包内每个 .appex 的 bundle ID 都以主应用 bundle ID 为前缀，否则 installd 会拒绝安装
+    private func verifyAppExtensionBundleIdentifiers(in bundleURL: URL) throws {
+        guard let mainBundle = ALTApplication(fileURL: bundleURL) else { return }
+        let mainBundleID = mainBundle.bundleIdentifier
+        guard !mainBundleID.isEmpty else { return }
+        
+        let fileManager = FileManager.default
+        guard let enumerator = fileManager.enumerator(
+            at: bundleURL,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return
+        }
+        
+        var invalidExtensions: [String] = []
+        for case let url as URL in enumerator {
+            guard url.pathExtension.lowercased() == "appex",
+                  let parser = try? InfoPlistParser(bundleURL: url),
+                  let extensionBundleID = parser.bundleIdentifier else { continue }
+            guard extensionBundleID == mainBundleID || extensionBundleID.hasPrefix(mainBundleID + ".") else {
+                invalidExtensions.append("\(self.relativePath(of: url, in: bundleURL))(\(extensionBundleID))")
+                continue
+            }
+        }
+        
+        if !invalidExtensions.isEmpty {
+            throw OperationError.invalidApp(reason: "App extension bundle ID mismatch, main bundle ID is '\(mainBundleID)': \(invalidExtensions.joined(separator: ", "))")
+        }
     }
 
     private func rewrittenTaskSchedulerIdentifiers(_ taskIDs: [String], from originalBundleID: String, to newBundleID: String) -> [String] {
